@@ -5,3 +5,6 @@ secrets/*
 !secrets/*.template
 
 venv/
+data/local/notes-00000.tsv
+*/.DS_Store
+.DS_Store
