@@ -1,0 +1,4 @@
+[submodule "students/sunghee/community-notes"]
+	path = students/sunghee/community-notes
+	url = https://github.com/starter821/communitynotes.git
+	branch = cn-2023
