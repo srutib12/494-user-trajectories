@@ -44,7 +44,7 @@ def _(pl):
 @app.cell
 def _(df):
     # Look at data
-    df
+    df.head()
     return
 
 
@@ -65,7 +65,7 @@ def _():
 
     Use chain-of-thought reasoning to classify this tweet's partisan lean.
 
-    **Step 1: Summarize the tweet's argument**
+    **Step 1: Summarize the tweet's argument**3
     What is this tweet claiming, advocating, or criticizing?
 
     **Step 2: Summarize context**
@@ -140,8 +140,38 @@ def _(mo):
 @app.cell
 def _(pl, results):
     # Look at results
-    pl.DataFrame(results)
-    return
+    results_df = pl.DataFrame(results)
+    results_df
+    return (results_df,)
+
+
+@app.cell
+def _(results_df, pl):
+    # Calculate accuracy
+    correct = (results_df["partisan_lean"] == results_df["prediction"]).sum()
+    total = results_df.height
+    accuracy = correct / total
+    
+    print(f"Overall Accuracy: {accuracy:.1%} ({correct}/{total})")
+    
+    # Per-category accuracy
+    category_accuracy = (
+        results_df
+        .with_columns(
+            (pl.col("partisan_lean") == pl.col("prediction")).alias("is_correct")
+        )
+        .group_by("partisan_lean")
+        .agg([
+            pl.col("is_correct").sum().alias("correct"),
+            pl.col("is_correct").count().alias("total"),
+            (pl.col("is_correct").sum() / pl.col("is_correct").count()).alias("accuracy")
+        ])
+        .sort("partisan_lean")
+    )
+    
+    print("\nPer-Category Accuracy:")
+    category_accuracy
+    return (accuracy, category_accuracy, correct, total)
 
 
 @app.cell
