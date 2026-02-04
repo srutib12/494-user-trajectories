@@ -7,7 +7,6 @@ app = marimo.App(width="medium")
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Political Ideology Classifier
     """)
     return
 
@@ -26,7 +25,6 @@ def _():
 
 @app.cell
 def _(OpenAI, os):
-    # Set your API key
     with open("secrets/OPENAIKEY.txt", "r") as f:
         os.environ["OPENAI_API_KEY"] = f.read()
     client = OpenAI()
@@ -35,7 +33,6 @@ def _(OpenAI, os):
 
 @app.cell
 def _(pl):
-    # Load MITweet dataset
     df = pl.read_csv("data/mitweet_sample.csv")
     print(f"Loaded {df.height} tweets")
     return (df,)
@@ -43,7 +40,6 @@ def _(pl):
 
 @app.cell
 def _(df):
-    # Look at data structure
     df.head(10)
     return
 
@@ -51,7 +47,6 @@ def _(df):
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Labeling
     """)
     return
 
@@ -84,19 +79,18 @@ def _(IMPROVED_PROMPT_TEMPLATE, client, df, pl, re, tqdm, time):
     def _parse_output(output_text: str) -> str:
         """Parse the classification from the LLM output."""
         text = (output_text or "").strip()
-        # Prefer the explicit <output> block if present
         m = re.search(r"<output>\s*(.*?)\s*</output>", text, flags=re.DOTALL | re.IGNORECASE)
         if m:
             text = m.group(1).strip()
         
-        # Also check for standalone labels
+
         text = text.strip().upper()
         valid_labels = ["LEFT", "RIGHT", "CENTER", "MIXED", "NONE"]
         for label in valid_labels:
             if label in text:
                 return label
         
-        return text  # Return as-is if no match
+        return text 
     
     def _query_llm(row: dict) -> dict:
         """Query the LLM for a single tweet."""
@@ -104,24 +98,21 @@ def _(IMPROVED_PROMPT_TEMPLATE, client, df, pl, re, tqdm, time):
         prompt = IMPROVED_PROMPT_TEMPLATE.format(tweet=tweet)
         resp = client.responses.create(model="gpt-4.1-mini", input=prompt)
         output_text = getattr(resp, "output_text", "") or ""
-        # Ensure closing tag if missing
         if "<output>" in output_text and "</output>" not in output_text:
             output_text = output_text + "</output>"
         return output_text
     
-    # Process rows with timing
     start_time = time.time()
     results = []
     for row in tqdm(df.iter_rows(named=True), total=df.height, desc="Labeling tweets"):
         output_text = _query_llm(row)
         prediction = _parse_output(output_text)
-        # Combine original row data with classification results
+
         result_row = {**row, **{"llm_output": output_text, "prediction": prediction}}
         results.append(result_row)
     
     elapsed_time = time.time() - start_time
     
-    # Convert results back to a DataFrame
     improved_predictions = pl.DataFrame(results)
     
     print(f"\nTotal time: {elapsed_time:.2f} seconds")
@@ -133,21 +124,18 @@ def _(IMPROVED_PROMPT_TEMPLATE, client, df, pl, re, tqdm, time):
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Evaluation
     """)
     return
 
 
 @app.cell
 def _(improved_predictions):
-    # Look at results
     improved_predictions
     return
 
 
 @app.cell
 def _(improved_predictions, pl):
-    # Diagnostic: Check some outputs to see what the model is producing
     print("Sample outputs (first 5 rows):")
     sample = improved_predictions.head(5).select(["tweet", "partisan_lean", "prediction", "llm_output"])
     for sample_row in sample.iter_rows(named=True):
@@ -160,21 +148,18 @@ def _(improved_predictions, pl):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Accuracy Metrics
     """)
     return
 
 
 @app.cell
 def _(improved_predictions, pl):
-    # Calculate accuracy
     correct = (improved_predictions["partisan_lean"] == improved_predictions["prediction"]).sum()
     total = improved_predictions.height
     accuracy = correct / total
     
     print(f"Overall Accuracy: {accuracy:.1%} ({correct}/{total})")
     
-    # Per-category accuracy
     category_accuracy = (
         improved_predictions
         .with_columns(
@@ -197,7 +182,6 @@ def _(improved_predictions, pl):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Confusion Matrix
     """)
     return
 
@@ -211,7 +195,6 @@ def _(improved_predictions, pl):
         .pivot(index="partisan_lean", on="prediction", values="len")
     )
 
-    # Get prediction columns (everything except the index)
     prediction_columns = [col for col in crosstab.columns if col != "partisan_lean"]
 
     crosstab = (
