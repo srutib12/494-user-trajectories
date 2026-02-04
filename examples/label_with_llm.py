@@ -15,7 +15,7 @@ def _(mo):
 @app.cell
 def _():
     import marimo as mo
-    import re 
+    import re
     import os
     import polars as pl
     from openai import OpenAI
@@ -66,13 +66,18 @@ def _():
     Use chain-of-thought reasoning to classify this tweet's partisan lean.
 
     **Step 1: Summarize the tweet's argument**
-    What is this tweet claiming, advocating, or criticizing?
+    What is this tweet claiming, advocating, or criticizing? Consider tone, style, and framing within
+    the context of online political discourse. Evaluate whether or not it is expressing or advancing a particular rhetorical frame,
+    and if so, what broader political tendency or tendencies that frame might exist within.
 
     **Step 2: Summarize context**
-    What relevant background information is necessary to understand this tweet's ideological positioning?
+    Establish the political context of the tweet, with particular focus on which country's politics it is likely situated in.
+    Briefly determine the primary ideological tendencies of that country's politics, classifying them at a high level into "LEFT", "CENTER", "RIGHT", or "OTHER".
+    "LEFT" indicates political tendencies which are broadly left-of-center, "RIGHT" indicates broadly right-of-center, "CENTER" indicates a political tendency
+    which is intentionally neither left- nor right-of-center, and "OTHER" indicates a syncretic or difficult-to-classify tendency.
 
     **Step 3: Determine direction**
-    Based on the tweet and context, which partisan lean does the tweet align with?
+    Based on the tweet and context, is it expressing a political opinion? If so, what ideological tendency does the tweet likely represent?
 
     # RESPONSE FORMAT
 
@@ -85,10 +90,10 @@ def _():
     </analysis>
 
     <output>
-    [LEFT/CENTER/RIGHT/MIXED]
+    [LEFT/CENTER/RIGHT/OTHER]
     </output>
 
-    Or if tweet is not political:
+    Or, if tweet is either not political or not expressing an opinion:
     <output>
     NONE
     </output>
@@ -106,7 +111,7 @@ def _(SIMPLE_PROMPT_TEMPLATE, client, df, pl, re, tqdm):
         if m:
             text = m.group(1).strip()
         return text.strip().upper()
-    
+
     def _query_llm(row: dict) -> dict:
         tweet = row["tweet"]
         prompt = SIMPLE_PROMPT_TEMPLATE.format(tweet=tweet)
