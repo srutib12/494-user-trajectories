@@ -6,3 +6,7 @@ secrets/*
 data/local/notes-00000.tsv
 */.DS_Store
 .DS_Store
+
+# Ignore local dataset
+dataset 1.29/
+
