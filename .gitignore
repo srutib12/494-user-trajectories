@@ -3,6 +3,8 @@ secrets/*
 
 # But okay to include templates
 !secrets/*.template
+
+venv/
 data/local/notes-00000.tsv
 */.DS_Store
 .DS_Store
@@ -10,3 +12,6 @@ data/local/notes-00000.tsv
 # Ignore local dataset
 dataset 1.29/
 
+uv.lock
+pyproject.toml
+.python-version
