@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.4"
+__generated_with = "0.19.7"
 app = marimo.App(width="medium")
 
 
@@ -30,7 +30,7 @@ def _(OpenAI, os):
     # Make sure to create the file OPENAIKEY.txt before running this
     # (You can use the OPENAIKEY.txt.template file as a template)
     with open("secrets/OPENAIKEY.txt", "r") as f:
-        os.environ["OPENAI_API_KEY"] = f.read()
+        os.environ["OPENAI_API_KEY"] = f.read().strip()
     client = OpenAI()
     return (client,)
 
@@ -45,7 +45,7 @@ def _(pl):
 @app.cell
 def _(df):
     # Look at data
-    df
+    df.head()
     return
 
 
@@ -59,7 +59,7 @@ def _(mo):
 
 @app.cell
 def _():
-    SIMPLE_PROMPT_TEMPLATE = """# TWEET
+    SIMPLE_PROMPT_TEMPLATE_change = """You are helping label political tweets by their partisan lean.
     {tweet}
 
     # ANALYSIS INSTRUCTIONS
@@ -83,13 +83,14 @@ def _():
     # RESPONSE FORMAT
 
     <analysis>
-    **Tweet's main argument:** [1-2 sentences]
+    **Main idea:**  
+    Briefly explain what the tweet is mainly saying or arguing (1–2 sentences).
 
-    **Context:** [1-2 sentence]
+    **Context:** 
+    Describe any relevant political or social background that helps explain the tweet[1-2 sentence]
 
     **Directional assessment:** [Direction] because [1-2 sentence reason]
     </analysis>
-
     <output>
     [LEFT/CENTER/RIGHT/OTHER]
     </output>
@@ -99,11 +100,11 @@ def _():
     NONE
     </output>
     """
-    return (SIMPLE_PROMPT_TEMPLATE,)
+    return (SIMPLE_PROMPT_TEMPLATE_change,)
 
 
 @app.cell
-def _(SIMPLE_PROMPT_TEMPLATE, client, df, pl, re, tqdm):
+def _(SIMPLE_PROMPT_TEMPLATE_change, client, df, pl, re, tqdm):
     def _parse_output(output_text: str) -> str:
         text = (output_text or "").strip()
         # Prefer the explicit <output> block if present
@@ -116,8 +117,8 @@ def _(SIMPLE_PROMPT_TEMPLATE, client, df, pl, re, tqdm):
 
     def _query_llm(row: dict) -> dict:
         tweet = row["tweet"]
-        prompt = SIMPLE_PROMPT_TEMPLATE.format(tweet=tweet)
-        resp = client.responses.create(model="gpt-4.1-mini", input=prompt)
+        prompt = SIMPLE_PROMPT_TEMPLATE_change.format(tweet=tweet)
+        resp = client.responses.create(model="gpt-4.1-mini", input=prompt, max_output_tokens=160)
         output_text = getattr(resp, "output_text", "") or ""
         return output_text
 
@@ -152,8 +153,38 @@ def _(mo):
 @app.cell
 def _(pl, results):
     # Look at results
-    pl.DataFrame(results)
-    return
+    results_df = pl.DataFrame(results)
+    results_df
+    return (results_df,)
+
+
+@app.cell
+def _(results_df, pl):
+    # Calculate accuracy
+    correct = (results_df["partisan_lean"] == results_df["prediction"]).sum()
+    total = results_df.height
+    accuracy = correct / total
+    
+    print(f"Overall Accuracy: {accuracy:.1%} ({correct}/{total})")
+    
+    # Per-category accuracy
+    category_accuracy = (
+        results_df
+        .with_columns(
+            (pl.col("partisan_lean") == pl.col("prediction")).alias("is_correct")
+        )
+        .group_by("partisan_lean")
+        .agg([
+            pl.col("is_correct").sum().alias("correct"),
+            pl.col("is_correct").count().alias("total"),
+            (pl.col("is_correct").sum() / pl.col("is_correct").count()).alias("accuracy")
+        ])
+        .sort("partisan_lean")
+    )
+    
+    print("\nPer-Category Accuracy:")
+    category_accuracy
+    return (accuracy, category_accuracy, correct, total)
 
 
 @app.cell
