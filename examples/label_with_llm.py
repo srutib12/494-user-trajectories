@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.4"
+__generated_with = "0.19.7"
 app = marimo.App(width="medium")
 
 
@@ -30,7 +30,7 @@ def _(OpenAI, os):
     # Make sure to create the file OPENAIKEY.txt before running this
     # (You can use the OPENAIKEY.txt.template file as a template)
     with open("secrets/OPENAIKEY.txt", "r") as f:
-        os.environ["OPENAI_API_KEY"] = f.read()
+        os.environ["OPENAI_API_KEY"] = f.read().strip()
     client = OpenAI()
     return (client,)
 
@@ -59,32 +59,36 @@ def _(mo):
 
 @app.cell
 def _():
-    SIMPLE_PROMPT_TEMPLATE = """# TWEET
+    SIMPLE_PROMPT_TEMPLATE_change = """You are helping label political tweets by their partisan lean.
     {tweet}
 
     # ANALYSIS INSTRUCTIONS
 
-    Use chain-of-thought reasoning to classify this tweet's partisan lean.
+    You are helping label political tweets by their partisan leaning.
+    Read the tweet and consider the following steps:
 
-    **Step 1: Summarize the tweet's argument**
-    What is this tweet claiming, advocating, or criticizing?
+    1. What is the tweet primarily expressing, arguing, or responding to?
+    2. Does the tweet explicitly support, criticize, or question any political ideology,
+    political group, policy, or public figure?
+    3. Is there any relevant political or social context that helps explain this tweet,
+    such as current events, political debates, or commonly discussed issues?
+    4. Based on the tweet and its context, determine which political stance 
+    (left-wing, centrist, or right-wing) the tweet best aligns with.
 
-    **Step 2: Summarize context**
-    What relevant background information is necessary to understand this tweet's ideological positioning?
-
-    **Step 3: Determine direction**
-    Based on the tweet and context, which partisan lean does the tweet align with?
+    If you believe the tweet does not express any political opinion or stance,
+    please mark it as "None."
 
     # RESPONSE FORMAT
 
     <analysis>
-    **Tweet's main argument:** [1-2 sentences]
+    **Main idea:**  
+    Briefly explain what the tweet is mainly saying or arguing (1–2 sentences).
 
-    **Context:** [1-2 sentence]
+    **Context:** 
+    Describe any relevant political or social background that helps explain the tweet[1-2 sentence]
 
     **Directional assessment:** [Direction] because [1-2 sentence reason]
     </analysis>
-
     <output>
     [LEFT/CENTER/RIGHT/MIXED]
     </output>
@@ -94,11 +98,11 @@ def _():
     NONE
     </output>
     """
-    return (SIMPLE_PROMPT_TEMPLATE,)
+    return (SIMPLE_PROMPT_TEMPLATE_change,)
 
 
 @app.cell
-def _(SIMPLE_PROMPT_TEMPLATE, client, df, pl, re, tqdm):
+def _(SIMPLE_PROMPT_TEMPLATE_change, client, df, pl, re, tqdm):
     def _parse_output(output_text: str) -> str:
         text = (output_text or "").strip()
         # Prefer the explicit <output> block if present
@@ -111,8 +115,8 @@ def _(SIMPLE_PROMPT_TEMPLATE, client, df, pl, re, tqdm):
 
     def _query_llm(row: dict) -> dict:
         tweet = row["tweet"]
-        prompt = SIMPLE_PROMPT_TEMPLATE.format(tweet=tweet)
-        resp = client.responses.create(model="gpt-4.1-mini", input=prompt)
+        prompt = SIMPLE_PROMPT_TEMPLATE_change.format(tweet=tweet)
+        resp = client.responses.create(model="gpt-4.1-mini", input=prompt, max_output_tokens=160)
         output_text = getattr(resp, "output_text", "") or ""
         return output_text
 
