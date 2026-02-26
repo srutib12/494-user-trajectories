@@ -15,3 +15,6 @@
 # Local datasets
 **/dataset 1.29/
 **/data/local/notes-00000.tsv
+dataset 2.24/
+students/frecesca-wang/issue47/*.parquet
+.DS_Store
