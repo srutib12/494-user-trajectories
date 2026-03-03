@@ -3,3 +3,15 @@ secrets/*
 
 # But okay to include templates
 !secrets/*.template
+
+# mac
+.DS_Store
+
+# data + big outputs
+data/*.parquet
+ratings_with_features.csv
+
+# marimo cache folders
+__marimo__/
+examples/__marimo__/
+students/**/__marimo__/
