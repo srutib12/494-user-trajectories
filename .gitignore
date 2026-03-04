@@ -2,6 +2,12 @@
 **/secrets/**
 !**/secrets/*.template
 
+# But okay to include templates
+!secrets/*.template
+
+# Large data files
+data/*.parquet
+
 # Python environments
 **/venv/
 **/__pycache__/
@@ -11,6 +17,7 @@
 
 # OS files
 **/.DS_Store
+.DS_Store
 
 # Local datasets
 **/dataset 1.29/
