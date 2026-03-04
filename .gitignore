@@ -3,3 +3,10 @@ secrets/*
 
 # But okay to include templates
 !secrets/*.template
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Large data files
+data/*.parquet
