@@ -1,18 +1,36 @@
 # Secrets
 **/secrets/**
-!**/secrets/*.template
+secrets/
 
 # But okay to include templates
 !secrets/*.template
+!**/secrets/*.template
 
-# mac
-.DS_Store
-
-# data + big outputs
-data/*.parquet
-ratings_with_features.csv
-
-# marimo cache folders
+# Python environments
+**/venv/
+**/__pycache__/
+**/uv.lock
+**/pyproject.toml
+**/.python-version
 __marimo__/
 examples/__marimo__/
 students/**/__marimo__/
+uv.lock
+pyproject.toml
+.python-version
+
+
+# OS files
+**/.DS_Store
+.DS_Store
+
+# Ignore local dataset
+dataset 1.29/
+data/*.parquet
+ratings_with_features.csv
+**/dataset 1.29/
+**/data/local/notes-00000.tsv
+dataset 2.24/
+**/dataset 2.24/
+students/frecesca-wang/issue47/*.parquet
+*.parquet
