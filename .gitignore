@@ -19,10 +19,12 @@ uv.lock
 pyproject.toml
 .python-version
 
-
 # OS files
 **/.DS_Store
 .DS_Store
+
+# Logs
+logs/
 
 # Ignore local dataset
 dataset 1.29/
@@ -34,3 +36,5 @@ dataset 2.24/
 **/dataset 2.24/
 students/frecesca-wang/issue47/*.parquet
 *.parquet
+data/renault_partisanship_labels.csv
+data/2026-02-27-note_status_records.csv
