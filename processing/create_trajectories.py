@@ -63,6 +63,19 @@ def enrich_with_intercepts_and_factors(scored_notes: pl.DataFrame) -> pl.DataFra
     )
     return scored_notes
 
+# Calculate calendar-based user month (months since first action) and calendar month
+def _enrich_with_user_and_calendar_month(df: pl.DataFrame) -> pl.DataFrame:
+    return df.with_columns(
+        _actionDt=pl.from_epoch(pl.col("createdAtMillis"), time_unit="ms"),
+        _firstActionDt=pl.from_epoch(pl.col("participantFirstActionMillis"), time_unit="ms"),
+    ).with_columns(
+        userMonth=(
+            (pl.col("_actionDt").dt.year() - pl.col("_firstActionDt").dt.year()) * 12
+            + pl.col("_actionDt").dt.month() - pl.col("_firstActionDt").dt.month()
+        ).cast(pl.Int32),
+        calendarMonth=pl.col("_actionDt").dt.strftime("%Y-%m"),
+    ).drop("_actionDt", "_firstActionDt")
+
 if __name__ == "__main__":
     # Load data 
     users       = pl.read_parquet("data/2026-02-03/userEnrollment.parquet") 
@@ -116,7 +129,6 @@ if __name__ == "__main__":
     logger.info(f"Calculated CRH statuses for {len(note_ever_crh):,} notes")
     logger.info(f"Calculated CRH statuses for {len(post_ever_crh):,} posts")
 
-
     # Enrich with scores and factors
     notes = notes.join(scores, left_on="noteId", right_on="noteId", how="left", coalesce=True, validate="1:1")
     ratings = ratings.join(scores, left_on="noteId", right_on="noteId", how="left", coalesce=True, validate="m:1")
@@ -140,21 +152,13 @@ if __name__ == "__main__":
     requests = requests.join(first_action.rename({"participantId": "requesterParticipantId"}), on="requesterParticipantId",    how="left", validate="m:1")
     logger.info("Enriched notes and ratings with user join dates")
 
-    # Calculate ms-since-first-action
-    notes    = notes     .with_columns(timeSinceUserFirstActionMillis=pl.col("createdAtMillis") - pl.col("participantFirstActionMillis"))
-    ratings  = ratings   .with_columns(timeSinceUserFirstActionMillis=pl.col("createdAtMillis") - pl.col("participantFirstActionMillis"))
-    requests = requests  .with_columns(timeSinceUserFirstActionMillis=pl.col("createdAtMillis") - pl.col("participantFirstActionMillis"))
-    logger.info("Calculated time-since-first-action for notes, ratings, and requests")
-
-    # Calculate user month of each action (e.g. month 0 = first 30 days after first action, month 1 = days 31-60, etc.)
-    _millis_per_month = 30 * 24 * 60 * 60 * 1000
-    notes    = notes     .with_columns(userMonth=(pl.col("timeSinceUserFirstActionMillis") / _millis_per_month).floor().cast(pl.Int32))
-    ratings  = ratings   .with_columns(userMonth=(pl.col("timeSinceUserFirstActionMillis") / _millis_per_month).floor().cast(pl.Int32))
-    requests = requests  .with_columns(userMonth=(pl.col("timeSinceUserFirstActionMillis") / _millis_per_month).floor().cast(pl.Int32))
+    notes    = _enrich_with_user_and_calendar_month(notes)
+    ratings  = _enrich_with_user_and_calendar_month(ratings)
+    requests = _enrich_with_user_and_calendar_month(requests)
 
     ratings  = ratings   .with_columns(ratingDate= pl.from_epoch(pl.col("createdAtMillis"), time_unit="ms").dt.date())
     requests = requests  .with_columns(requestDate=pl.from_epoch(pl.col("createdAtMillis"), time_unit="ms").dt.date())
-    logger.info("Calculated time-since-first-action and user months")
+    logger.info("Calculated user months and calendar months")
 
     # Enrich with Renault partisanship labels
     notes    = notes     .join(partisanship.select("note_id", "party").rename({"party":"postAuthorParty"}), left_on="noteId", right_on="note_id", coalesce=True, how="left", validate="1:1")
@@ -187,10 +191,12 @@ if __name__ == "__main__":
 
     # Aggregate all users' notes per month
     user_notes = notes.group_by(["noteAuthorParticipantId", "userMonth"]).agg(
+        calendarMonth=pl.col("calendarMonth").first(),
         notesCreated=pl.len(),
         hitRate=pl.col("noteEverCrh").mean(),
         hits=pl.col("noteEverCrh").sum(),
         avgNoteFactor=pl.col("noteFinalFactor").mean(),
+        avgNoteIntercept=pl.col("noteFinalIntercept").mean(),
         topicsTargeted=pl.col("topic").filter(pl.col("topic").is_not_null()).n_unique(),
         avgRatingsEarned=pl.col("numRatings").mean(),
         *[
@@ -205,6 +211,7 @@ if __name__ == "__main__":
 
     # Aggregate all users' ratings per month
     user_ratings = ratings.group_by(["raterParticipantId", "userMonth"]).agg(
+        calendarMonth=pl.col("calendarMonth").first(),
         notesRated=pl.len(),
         avgHelpfulFactor=pl.col("noteFinalFactor").filter(pl.col("helpfulnessLevel") == "HELPFUL").mean(),
         avgNotHelpfulFactor=pl.col("noteFinalFactor").filter(pl.col("helpfulnessLevel") != "HELPFUL").mean(),
@@ -212,6 +219,23 @@ if __name__ == "__main__":
         avgNotHelpfulIntercept=pl.col("noteFinalIntercept").filter(pl.col("helpfulnessLevel") != "HELPFUL").mean(),
         correctHelpfuls=pl.col("noteEverCrh").filter(pl.col("helpfulnessLevel") == "HELPFUL").sum(),
         correctNotHelpfuls=(~pl.col("noteEverCrh")).filter(pl.col("helpfulnessLevel") != "HELPFUL").sum(),
+
+        # Counts by factor sign x helpfulness
+        posFactorRatedHelpful=((pl.col("noteFinalFactor") > 0) & (pl.col("helpfulnessLevel") == "HELPFUL")).sum(),
+        posFactorRatedNotHelpful=((pl.col("noteFinalFactor") > 0) & (pl.col("helpfulnessLevel") != "HELPFUL")).sum(),
+        negFactorRatedHelpful=((pl.col("noteFinalFactor") < 0) & (pl.col("helpfulnessLevel") == "HELPFUL")).sum(),
+        negFactorRatedNotHelpful=((pl.col("noteFinalFactor") < 0) & (pl.col("helpfulnessLevel") != "HELPFUL")).sum(),
+
+        # % correct among +/- factor notes rated helpful/not helpful
+        pctCorrectPosFactorHelpful=pl.col("noteEverCrh").filter((pl.col("noteFinalFactor") > 0) & (pl.col("helpfulnessLevel") == "HELPFUL")).mean(),
+        pctCorrectPosFactorNotHelpful=(~pl.col("noteEverCrh")).filter((pl.col("noteFinalFactor") > 0) & (pl.col("helpfulnessLevel") != "HELPFUL")).mean(),
+        pctCorrectNegFactorHelpful=pl.col("noteEverCrh").filter((pl.col("noteFinalFactor") < 0) & (pl.col("helpfulnessLevel") == "HELPFUL")).mean(),
+        pctCorrectNegFactorNotHelpful=(~pl.col("noteEverCrh")).filter((pl.col("noteFinalFactor") < 0) & (pl.col("helpfulnessLevel") != "HELPFUL")).mean(),
+
+        # % correct among helpful/not-helpful ratings overall
+        pctHelpfulRatingsCorrect=pl.col("noteEverCrh").filter(pl.col("helpfulnessLevel") == "HELPFUL").mean(),
+        pctNotHelpfulRatingsCorrect=(~pl.col("noteEverCrh")).filter(pl.col("helpfulnessLevel") != "HELPFUL").mean(),
+
         uniqueDaysRated=pl.col("ratingDate").n_unique(),
         avgPostsRatedPerDay=pl.len() / pl.col("ratingDate").n_unique(),
         uniqueTopicsRated=pl.col("topic").filter(pl.col("topic").is_not_null()).n_unique(),
@@ -244,6 +268,7 @@ if __name__ == "__main__":
     logger.info(f"Aggregated user ratings: {len(user_ratings):,} rows")
 
     user_requests = requests.group_by(["requesterParticipantId", "userMonth"]).agg(
+        calendarMonth=pl.col("calendarMonth").first(),
         requestsMade=pl.len(),
         numRequestsResultingInCrh   = pl.col("requestResultedInCrh") .sum(),
         numRequestsResultingInNote  = pl.col("requestResultedInNote").sum(),
